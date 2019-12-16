@@ -1,0 +1,59 @@
+--WITH XMLNAMESPACES ('http://schemas.microsoft.com/sqlserver/2004/07/showplan' AS sqlx) 
+--SELECT ProcedureName = IsNull(object_name(st.objectid, st.dbid), N'Ad hoc or object not found'),
+--    qp.query_plan AS QueryPlan,
+--	IndexName = I.n.value('(//sqlx:IndexScan/sqlx:Object/@Index)[1]', 'sysname'),
+--	TableName = I.n.value('(//sqlx:IndexScan/sqlx:Object/@Schema)[1]', 'sysname') + N'.' + I.n.value('(//sqlx:IndexScan/sqlx:Object/@Table)[1]', 'sysname'),
+--	SQLText = I.n.value('(//sqlx:StmtSimple/@StatementText)[1]', 'varchar(max)')
+--FROM sys.dm_exec_cached_plans AS cp 
+--Cross Apply sys.dm_exec_query_plan(cp.plan_handle) AS qp 
+--Cross Apply sys.dm_exec_sql_text(cp.plan_handle) AS st
+--Cross Apply qp.query_plan.nodes('//sqlx:IndexScan[@Storage="MemoryOptimized"]') As I(n)
+--Inner Join sys.hash_indexes HI On Quotename(HI.name) = I.n.value('(//sqlx:IndexScan/sqlx:Object/@Index)[1]', 'sysname')
+--	And HI.object_id = OBJECT_ID(I.n.value('(//sqlx:IndexScan/sqlx:Object/@Schema)[1]', 'sysname') + N'.' + I.n.value('(//sqlx:IndexScan/sqlx:Object/@Table)[1]', 'sysname'))
+--WHERE qp.dbid = DB_ID()
+--AND I.n.exist('//sqlx:IndexScan/sqlx:Object[@IndexKind="NonClusteredHash"]') = 1;
+
+
+DECLARE @plan_handle varbinary(64)
+DECLARE @myQuery XML
+DECLARE @index_name SYSNAME
+
+SELECT 
+	@plan_handle = plan_handle
+FROM sys.dm_exec_cached_plans   
+CROSS APPLY sys.dm_exec_sql_text(plan_handle) AS st  
+WHERE text LIKE N'(@AccountNumber varchar(19))select
+	ar.ISSUER_ACCOUNT_RANGE_LOW         IssuerAccountRangeLow,
+	ar.ISSUER_ACCOUNT_RANGE_HIGH        IssuerAccountRangeHigh,
+	ar.ID_PRODUCT                       IdProduct,
+	ar.ISSUER_CARDPROGID_PRIORITY_COD   IssuerCardprogidPriorityCod,
+	ar.ID_BRAND                         IdBrand,
+	ar.COUNTRY_CODE_NUMERIC             CountryCodeNumeric,
+	ap.PRODUCT_TYPE                     ProductType
+from 
+	dbo.AU_ACCOUNT_RANGE ar
+	join dbo.AU_PRODUCT ap on ar.id_product = ap.id_product
+where 
+	@AccountNumber >= ar.ISSUER_ACCOUNT_RANGE_LOW
+	and @AccountNumber <= ar.ISSUER_ACCOUNT_RANGE_HIGH';  
+
+
+select @myQuery = query_plan
+from sys.dm_exec_query_plan(@plan_handle) AS qp
+
+
+;WITH XMLNAMESPACES ('http://schemas.microsoft.com/sqlserver/2004/07/showplan' AS sqlx) 
+select 
+	@index_name = query_plan.value('(//sqlx:IndexScan/sqlx:Object/@Index)[1]', 'sysname') --AS [index name]
+	--, query_plan.value('(//sqlx:IndexScan/sqlx:Object/@Schema)[1]', 'sysname') + N'.' + query_plan.value('(//sqlx:IndexScan/sqlx:Object/@Table)[1]', 'sysname') AS [Table Name]
+from sys.dm_exec_query_plan(@plan_handle) AS qp
+
+
+IF (@index_name = '[PK_AU_ACCOUNT_RANGE]')
+BEGIN
+	PRINT 'TUDO NA PAZ'
+END
+ELSE
+BEGIN
+	PRINT 'FAZ O REFRESH'
+END
