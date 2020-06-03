@@ -1,8 +1,10 @@
 
 use <Table>
+GO
 
-Declare @LoginName VARCHAR(128) = 'XXXAppUser'
-
+--OR NULL
+Declare @LoginName VARCHAR(128) = 'XXXX'
+--Declare @LoginName VARCHAR(128)
 /*
 Security Audit Report
 1) List all access provisioned to a SQL user or Windows user/group directly
@@ -42,8 +44,8 @@ ColumnName      : Name of the column of the object that the user/role is assigne
                          WHEN 'U' THEN 'Windows User'
                          WHEN 'G' THEN 'Windows Group'
                      END,
-        [DatabaseUserName] = princ.[name],
         [LoginName]        = ulogin.[name],
+        [DatabaseUserName] = princ.[name],
         [Role]             = NULL,
         [PermissionType]   = perm.[permission_name],
         [PermissionState]  = perm.[state_desc],
@@ -77,7 +79,7 @@ ColumnName      : Name of the column of the object that the user/role is assigne
         princ.[type] IN ('S','U','G')
         -- No need for these system accounts
         AND princ.[name] NOT IN ('sys', 'INFORMATION_SCHEMA')
-		AND ulogin.[name] = @LoginName 
+		AND (@LoginName IS NULL OR ulogin.[name] = @LoginName)
 
 UNION
 
@@ -88,8 +90,8 @@ UNION
                          WHEN 'U' THEN 'Windows User'
                          WHEN 'G' THEN 'Windows Group'
                      END,
-        [DatabaseUserName] = membprinc.[name],
         [LoginName]        = ulogin.[name],
+        [DatabaseUserName] = membprinc.[name],
         [Role]             = roleprinc.[name],
         [PermissionType]   = perm.[permission_name],
         [PermissionState]  = perm.[state_desc],
@@ -127,7 +129,7 @@ UNION
         membprinc.[type] IN ('S','U','G')
         -- No need for these system accounts
         AND membprinc.[name] NOT IN ('sys', 'INFORMATION_SCHEMA')
-		AND ulogin.[name] = @LoginName 
+		AND (@LoginName IS NULL OR ulogin.[name] = @LoginName)
 
 ORDER BY
     [UserType],
