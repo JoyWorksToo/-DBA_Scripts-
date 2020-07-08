@@ -1,0 +1,15 @@
+
+### Config Alias
+$registryPath = 'HKLM:\SOFTWARE\Microsoft\MSSQLServer\Client\ConnectTo'
+$registryPathWow6432Node = 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\MSSQLServer\Client\ConnectTo'
+Get-ItemProperty -Path $registryPath
+### New-Item -Path $registryPath -Force | Out-Null
+Get-ItemProperty -Path $registryPathWow6432Node
+### New-Item -Path $registryPathWow6432Node -Force
+
+$TcpPort = "31433"
+$ServerName = 'Server'
+$Name = 'server\Instance'
+$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
+Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
+Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 

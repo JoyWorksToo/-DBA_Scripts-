@@ -120,6 +120,58 @@ ORDER BY indexstats.avg_fragmentation_in_percent desc
 
 
 
+----------------------------------------------------------------------------------
+---------------------- IDEX INFORMATION BY PARTITION -----------------------------
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+
+SELECT 
+	SCHEMA_NAME(t.schema_id) AS SchemaName
+	, [t].[name] AS TablaName
+	, ISNULL([i].[name], 'HEAP_TABLE_' + [t].[name]) AS IndexName
+	, i.index_id
+	, [p].[partition_number]
+	, tp.total_partition_number
+	, (sz.[used_page_count]) * 8. AS [Index size (KB)]
+	, ((sz.[used_page_count]) * 8.)/1024. AS [Index size (MB)]
+	, ((sz.[used_page_count]) * 8.)/(1024.*1024.) AS [Index size (GB)]
+	, CASE WHEN [p].[data_compression_desc] = 'PAGE' THEN 'PAGE_COMPRESSION' ELSE [p].[data_compression_desc] END AS [DataCompression]
+	, p.[rows] AS PartitionRows
+FROM [sys].[partitions] AS [p]
+INNER JOIN [sys].[tables] AS [t] 
+	ON [t].[object_id] = [p].[object_id]
+INNER JOIN [sys].[indexes] AS i 
+	ON p.index_id = i.index_id 
+	AND t.object_id = i.object_id
+INNER JOIN [sys].[dm_db_partition_stats] AS sz
+	ON sz.[object_id] = i.[object_id] 
+	AND sz.[index_id] = i.[index_id]
+	AND sz.partition_id = p.partition_id
+LEFT JOIN (
+	SELECT 
+		t.schema_id
+		, [t].[name] AS TablaName
+		, i.index_id
+		, MAX([p].[partition_number]) as [total_partition_number]
+	FROM [sys].[partitions] AS [p]
+	INNER JOIN [sys].[tables] AS [t] 
+		ON [t].[object_id] = [p].[object_id]
+	INNER JOIN [sys].[indexes] AS i 
+		ON p.index_id = i.index_id 
+		AND t.object_id = i.object_id
+	GROUP BY
+		t.schema_id
+		, [t].[name] 
+		, i.index_id
+	) AS tp
+	ON tp.schema_id = t.schema_id
+	AND tp.TablaName = t.[name]
+	AND tp.index_id = i.index_id
+ORDER BY 
+	[Index size (KB)] DESC
+	, [t].[name] ASC
+	, i.index_id ASC
+	, p.partition_number asc
 
 ----------------------------------------------------------------------------------
 ---------------------- IDEX KEYS, INCLUDES, FILTERS, ETC... ----------------------
