@@ -103,3 +103,50 @@ INNER JOIN #tbs AS tbs
 	AND tbs.TableName = tab.name
 ORDER BY 
 	PercentLeft DESC
+
+
+
+
+select schema_name(tab.schema_id) as [schema_name]
+    , tab.[name] as table_name
+    , col.[name] as column_name
+    , typ.name
+	, col.precision
+	, col.scale
+	, CASE WHEN typ.name = 'INT' THEN
+		2147483647 - CAST(tbs.TotalRowCount AS BIGINT)
+	  WHEN typ.name = 'BIGINT' THEN
+		9223372036854775807 - CAST(tbs.TotalRowCount AS BIGINT)
+	  WHEN typ.name IN ('numeric', 'decimal') THEN
+		CAST(REPLICATE('9', col.precision - col.scale) AS DECIMAL(25,0)) - CAST(tbs.TotalRowCount AS DECIMAL(25,0))
+	  ELSE 0 END
+	  AS NumbersLeft
+	, CASE WHEN typ.name = 'INT' THEN
+		CAST(tbs.TotalRowCount AS BIGINT)*100 / 2147483647 
+	  WHEN typ.name = 'BIGINT' THEN
+		CAST(tbs.TotalRowCount AS DECIMAL(18,0))*100 / 9223372036854775807 
+	  WHEN typ.name IN ('numeric', 'decimal') THEN
+		CAST(tbs.TotalRowCount AS DECIMAL(30,0))*100 / CAST(REPLICATE('9', col.precision - col.scale) AS DECIMAL(25,0))
+	  ELSE 0 END
+	  AS PercentLeft
+	, tbs.TotalRowCount
+	, 'Se retornar negativo, verificar, pode ser uma coluna com numero repetido' as Info
+from sys.tables tab
+--inner join sys.indexes pk
+--    on tab.object_id = pk.object_id 
+--    and pk.is_primary_key = 1
+--inner join sys.index_columns ic
+--    on ic.object_id = pk.object_id
+--    and ic.index_id = pk.index_id
+inner join sys.columns col
+    on tab.object_id = col.object_id
+    --and col.column_id = ic.column_id
+INNER JOIN sys.types AS typ
+	ON col.system_type_id = typ.system_type_id
+INNER JOIN #tbs AS tbs
+	ON tbs.SchemaName = SCHEMA_NAME(tab.schema_id)
+	AND tbs.TableName = tab.name
+WHERE
+	typ.name IN ('INT', 'BIGINT', 'DECIMAL', 'NUMERIC')
+ORDER BY 
+	PercentLeft DESC
