@@ -1,0 +1,203 @@
+
+PARA ADICIONAR QTS-CHI, TEM A PARTE DE BAIXO 
+
+/* INSERINDO NOVO SERVIDOR COM NOVA INSTANCIA */
+--PARA QTS-ATL
+
+DECLARE @Datacenter VARCHAR(128) = 'QTS-ATL' --Os nomes são 'TierPoint' e 'Server Central'
+DECLARE @DatacenterIp INT = 240
+DECLARE @ServerName VARCHAR(128) = 'TRE-V-SQL1-1P01'
+DECLARE @instanceName VARCHAR(128) = 'SQL2017'
+DECLARE @VLAN VARCHAR(128) = 'ALL'
+DECLARE @ServerIP VARCHAR(15) = '10.240.64.15'
+DECLARE @ServerIPid INT 
+DECLARE @ProductionIP VARCHAR(15) --= '172.16.31.13'
+DECLARE @ProductionIPid INT
+DECLARE @MyServerId INT
+DECLARE @SQLINstanceID INT
+DECLARE @port SMALLINT = 31433
+
+BEGIN TRY
+	BEGIN TRAN
+
+	--VERIFICA SE DATACENTER EXISTE
+	IF (SELECT DatacenterName FROM Datacenter WHERE DatacenterName = @Datacenter and DatacenterIP = @DatacenterIp) IS NOT NULL
+	BEGIN
+		PRINT 'DATACENTER OK'
+	END
+	ELSE
+		RAISERROR ('DATACENTER DONT EXISTS', 16, 1);
+
+	--VERIFICA SE VLAN EXISTE
+	IF (SELECT VLANName FROM VLAN INNER JOIN Datacenter ON vlan.DatacenterId = datacenter.DatacenterId WHERE VLANName = @VLAN and datacenterName = @Datacenter and DatacenterIP = @DatacenterIp) IS NOT NULL
+	BEGIN
+		PRINT 'VLAN OK'
+	END
+	ELSE 
+		RAISERROR ('VLAN DONT EXISTS', 16, 1);
+
+
+	--VERIFICA SE O IP DO SERVER EXISTE
+	IF (SELECT Ip FROM IPs WHERE Ip = @ServerIP) IS NULL
+	BEGIN
+		INSERT INTO IPs (Ip, VLANId) VALUES (@ServerIP, 1) --FIRST SERVER IP
+		SELECT @ServerIPid = SCOPE_IDENTITY()
+	END 
+	ELSE RAISERROR ('ERROR - IP ALREADY EXISTS', 16, 1); 
+
+		--VERIFICA SE O HOSTNAME EXIST
+	IF (SELECT Servername FROM MyServer WHERE Servername = @Servername) IS NULL
+	BEGIN
+		PRINT 'SERVER NAO EXISTE, OK'
+		INSERT INTO MyServer (Servername) VALUES (@ServerName) 
+		SELECT @MyServerId = SCOPE_IDENTITY()
+	END
+	ELSE RAISERROR ('ERROR - HOSTNAME ALREADY EXISTS', 16, 1); 
+
+	
+	IF (SELECT 1 FROM ServerIPs serIPs INNER JOIN IPs ON serIPs.IPsId = IPs.IPsId WHERE MyServerId = @MyServerId AND IPs.Ip = @ServerIP) IS NULL
+	BEGIN
+		PRINT 'ServerIps ESTA OK'
+		INSERT INTO ServerIPs (MyServerId, IPsId, IPType) VALUES(@MyServerId, @ServerIPid, 'Management')
+	END
+	ELSE RAISERROR ('ERROR - ServerIp already exists', 16, 1); 
+
+	--VERIFICA SE O IP DA INSTANCIA (PROD) EXISTE
+	IF @ProductionIP IS NULL 
+	BEGIN
+		SET @ProductionIP = @ServerIP
+		SET @ProductionIPid = @ServerIPid
+	END
+	ELSE IF (SELECT Ip FROM IPs WHERE Ip = @ProductionIP) IS NULL
+		BEGIN
+			INSERT INTO IPs (Ip, VLANId) VALUES (@ProductionIP, 1) --SECOND INSTANCE IP
+			SELECT @ProductionIPid = SCOPE_IDENTITY()
+		END
+	ELSE RAISERROR ('ERROR - IP ALREADY EXISTS', 16, 1); 
+	
+	--VERIFICA INSTANCIA DO SERVIDOR
+	IF (SELECT ins.InstanceName FROM MyServer AS ser INNER JOIN SQLInstance AS ins ON ser.MyServerId = ins.MyServerId WHERE ins.InstanceName = @InstanceName AND ser.Servername = @ServerName) IS NULL
+	BEGIN
+		PRINT 'INSTANCIA DO SERVIDOR NAO EXISTE, OK'
+		INSERT INTO SQLInstance (MyServerId, InstanceName) VALUES (@MyServerId, @instanceName)
+		SELECT @SQLINstanceID = SCOPE_IDENTITY()
+	END
+	ELSE RAISERROR ('INSTANCIA NO SERVIDOR EXISTE', 16, 1);  
+	
+	IF (SELECT 1 FROM InstanceIP AS insIPs INNER JOIN IPs ON insIPs.IPsId = IPs.IPsId WHERE SQLInstanceID = @SQLINstanceID AND IPs.Ip = @ServerIP AND Port = @port) IS NULL
+	BEGIN
+		PRINT 'InstanceIP ESTA OK'
+		INSERT INTO InstanceIP (SQLInstanceID, IPsId, Port) VALUES(@SQLINstanceID, @ProductionIPid, @Port)
+	END
+	ELSE RAISERROR ('ERROR - InstanceIp already exists', 16, 1); 
+
+	COMMIT
+
+END TRY
+BEGIN CATCH
+	PRINT'ROLLBACKING';
+	ROLLBACK;
+	THROW;
+END CATCH;
+
+
+-------------------
+--PARA QTS-CHI
+
+/* INSERINDO NOVO SERVIDOR COM NOVA INSTANCIA */
+
+DECLARE @Datacenter VARCHAR(128) = 'QTS-CHI' --Os nomes são 'TierPoint' e 'Server Central'
+DECLARE @DatacenterIp INT = 100
+DECLARE @ServerName VARCHAR(128) = 'stx-v-sql1-2p02'
+DECLARE @instanceName VARCHAR(128) = 'SQL2016'
+DECLARE @VLAN VARCHAR(128) = 'ALL'
+DECLARE @ServerIP VARCHAR(15) = '10.100.72.12'
+DECLARE @ServerIPid INT 
+DECLARE @ProductionIP VARCHAR(15) --= '172.16.31.13'
+DECLARE @ProductionIPid INT
+DECLARE @MyServerId INT
+DECLARE @SQLINstanceID INT
+DECLARE @port SMALLINT = 31433
+
+BEGIN TRY
+	BEGIN TRAN
+
+	--VERIFICA SE DATACENTER EXISTE
+	IF (SELECT DatacenterName FROM Datacenter WHERE DatacenterName = @Datacenter and DatacenterIP = @DatacenterIp) IS NOT NULL
+	BEGIN
+		PRINT 'DATACENTER OK'
+	END
+	ELSE
+		RAISERROR ('DATACENTER DONT EXISTS', 16, 1);
+
+	--VERIFICA SE VLAN EXISTE
+	IF (SELECT VLANName FROM VLAN INNER JOIN Datacenter ON vlan.DatacenterId = datacenter.DatacenterId WHERE VLANName = @VLAN and datacenterName = @Datacenter and DatacenterIP = @DatacenterIp) IS NOT NULL
+	BEGIN
+		PRINT 'VLAN OK'
+	END
+	ELSE 
+		RAISERROR ('VLAN DONT EXISTS', 16, 1);
+
+
+	--VERIFICA SE O IP DO SERVER EXISTE
+	IF (SELECT Ip FROM IPs WHERE Ip = @ServerIP) IS NULL
+	BEGIN
+		INSERT INTO IPs (Ip, VLANId) VALUES (@ServerIP, 1) --FIRST SERVER IP
+		SELECT @ServerIPid = SCOPE_IDENTITY()
+	END 
+	ELSE RAISERROR ('ERROR - IP ALREADY EXISTS', 16, 1); 
+
+		--VERIFICA SE O HOSTNAME EXIST
+	IF (SELECT Servername FROM MyServer WHERE Servername = @Servername) IS NULL
+	BEGIN
+		PRINT 'SERVER NAO EXISTE, OK'
+		INSERT INTO MyServer (Servername) VALUES (@ServerName) 
+		SELECT @MyServerId = SCOPE_IDENTITY()
+	END
+	ELSE RAISERROR ('ERROR - HOSTNAME ALREADY EXISTS', 16, 1); 
+
+	
+	IF (SELECT 1 FROM ServerIPs serIPs INNER JOIN IPs ON serIPs.IPsId = IPs.IPsId WHERE MyServerId = @MyServerId AND IPs.Ip = @ServerIP) IS NULL
+	BEGIN
+		PRINT 'ServerIps ESTA OK'
+		INSERT INTO ServerIPs (MyServerId, IPsId, IPType) VALUES(@MyServerId, @ServerIPid, 'Management')
+	END
+	ELSE RAISERROR ('ERROR - ServerIp already exists', 16, 1); 
+
+	--VERIFICA SE O IP DA INSTANCIA (PROD) EXISTE
+	IF @ProductionIP IS NULL 
+	BEGIN
+		SET @ProductionIP = @ServerIP
+		SET @ProductionIPid = @ServerIPid
+	END
+	ELSE IF (SELECT Ip FROM IPs WHERE Ip = @ProductionIP) IS NULL
+		BEGIN
+			INSERT INTO IPs (Ip, VLANId) VALUES (@ProductionIP, 1) --SECOND INSTANCE IP
+			SELECT @ProductionIPid = SCOPE_IDENTITY()
+		END
+	ELSE RAISERROR ('ERROR - IP ALREADY EXISTS', 16, 1); 
+	
+	--VERIFICA INSTANCIA DO SERVIDOR
+	IF (SELECT ins.InstanceName FROM MyServer AS ser INNER JOIN SQLInstance AS ins ON ser.MyServerId = ins.MyServerId WHERE ins.InstanceName = @InstanceName AND ser.Servername = @ServerName) IS NULL
+	BEGIN
+		PRINT 'INSTANCIA DO SERVIDOR NAO EXISTE, OK'
+		INSERT INTO SQLInstance (MyServerId, InstanceName) VALUES (@MyServerId, @instanceName)
+		SELECT @SQLINstanceID = SCOPE_IDENTITY()
+	END
+	ELSE RAISERROR ('INSTANCIA NO SERVIDOR EXISTE', 16, 1);  
+	
+	IF (SELECT 1 FROM InstanceIP AS insIPs INNER JOIN IPs ON insIPs.IPsId = IPs.IPsId WHERE SQLInstanceID = @SQLINstanceID AND IPs.Ip = @ServerIP AND Port = @port) IS NULL
+	BEGIN
+		PRINT 'InstanceIP ESTA OK'
+		INSERT INTO InstanceIP (SQLInstanceID, IPsId, Port) VALUES(@SQLINstanceID, @ProductionIPid, @Port)
+	END
+	ELSE RAISERROR ('ERROR - InstanceIp already exists', 16, 1); 
+
+	COMMIT
+
+END TRY
+BEGIN CATCH
+	PRINT'ROLLBACKING';
+	ROLLBACK;
+	THROW;
+END CATCH;
