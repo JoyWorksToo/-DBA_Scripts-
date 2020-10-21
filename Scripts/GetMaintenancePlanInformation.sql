@@ -1,6 +1,5 @@
 USE msdb
 GO
-
 ;WITH XMLNAMESPACES ('www.microsoft.com/SqlServer/Dts' AS DTS
 , 'www.microsoft.com/sqlserver/dts/tasks/sqltask'AS SQLTask)
 , ssis AS (
@@ -105,8 +104,16 @@ GO
 )
 SELECT 
 	s.name AS MaintenancePlanName
+	, CASE 
+		WHEN c.value('../@SQLTask:BackupAction', 'NVARCHAR(500)') = '2' THEN 'LOG'
+		WHEN c.value('../@SQLTask:BackupAction', 'NVARCHAR(500)') = '0' AND c.value('../@SQLTask:BackupIsIncremental', 'NVARCHAR(500)') = 'False' THEN 'FULL'
+		WHEN c.value('../@SQLTask:BackupAction', 'NVARCHAR(500)') = '0' AND c.value('../@SQLTask:BackupIsIncremental', 'NVARCHAR(500)') = 'True' THEN 'DIFF'
+		ELSE 'Undefined'
+	  END AS BackupType
 	, c.value('@SQLTask:DatabaseName', 'NVARCHAR(128)') AS DatabaseName
 	, c.value('../@SQLTask:BackupDestinationAutoFolderPath', 'NVARCHAR(500)') AS Dest
+	--, c.value('../@SQLTask:BackupAction', 'NVARCHAR(500)') AS BckType
+	--, c.value('../@SQLTask:BackupIsIncremental', 'NVARCHAR(500)') AS BackupIsIncremental
 	, j.JobName
 	, j.IsEnabled
 	, j.JobCategory
