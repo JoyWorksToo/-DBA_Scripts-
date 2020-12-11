@@ -46,7 +46,7 @@ try
   
     ##Install Windows Feature
     import-module servermanager
-    $FeatureInstalled = (Get-WindowsFeature -Name Telnet-Client,File-Services,Failover-Clustering,RSAT-Clustering-AutomationServer,RSAT-Clustering-PowerShell,RSAT-Clustering-CmdInterface,RSAT-AD-PowerShell | where Installed).name
+    $FeatureInstalled = (Get-WindowsFeature -Name Telnet-Client,File-Services,Failover-Clustering,RSAT-Clustering-AutomationServer,RSAT-Clustering-PowerShell,RSAT-Clustering-CmdInterface,RSAT-AD-PowerShell,RSAT-Clustering-Mgmt | where Installed).name
     $InstallFeature = (Get-WindowsFeature -Name Telnet-Client,File-Services,Failover-Clustering,RSAT-Clustering-AutomationServer,RSAT-Clustering-PowerShell,RSAT-Clustering-CmdInterface,RSAT-AD-PowerShell | where InstallState -ne Installed).name
 
     IF ($FeatureInstalled.count -gt 0) {Write-Output "Windows Features already installed: $($FeatureInstalled -join ", ")"}
