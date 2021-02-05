@@ -177,6 +177,9 @@ ORDER BY
 ---------------------- IDEX KEYS, INCLUDES, FILTERS, ETC... ----------------------
 -------------------------------- SIZE AND USAGE ----------------------------------
 ----------------------------------------------------------------------------------
+use Buy4_accounting
+go
+
 
 --Se quiser todas as colunas, apenas deixar como null
 DECLARE @TableName VARCHAR(128) = NULL
@@ -229,6 +232,7 @@ DECLARE @TableName VARCHAR(128) = NULL
 	)
 SELECT 
 	  isnull(DB_NAME(database_id), DB_NAME(db_id())) AS [DatabaseName]
+	, SCHEMA_NAME(o.schema_id) AS SchemaName
 	, o.name AS TableName
 	, I.name AS [IndexName]
 	, iq.Index_id
