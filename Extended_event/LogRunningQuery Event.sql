@@ -1,17 +1,4 @@
---written by MDB and ALM for TheBakingDBA.Blogspot.Com
--- basic XE session creation written by Pinal Dave
--- http://blog.sqlauthority.com/2010/03/29/sql-server-introduction-to-extended-events-finding-long-running-queries/
--- mdb 2015/03/13 1.1 - added a query to the ring buffer's header to get # of events run, more comments
--- mdb 2015/03/13 1.2 - added model_end events, filtering on hostname, using TRACK_CAUSALITY, and multiple events
--- mdb 2015/03/18 1.3 - changed header parse to dynamic, courtesy of Mikael Eriksson on StackOverflow
--- This runs on at 2008++ (tested on 2008, 2008R2, 2012, and 2014). Because of that, no NOT LIKE exclusion
-------------------------------
--- Create the Event Session --
-------------------------------
- 
-IF EXISTS(SELECT * FROM sys.server_event_sessions WHERE name='LongRunningQuery')
-DROP EVENT SESSION LongRunningQuery ON SERVER
-GO
+
 -- Create Event
 CREATE EVENT SESSION LongRunningQuery
 ON SERVER
@@ -22,10 +9,12 @@ ADD EVENT sqlserver.rpc_completed(
     ACTION(
 		sqlserver.client_app_name
 		,sqlserver.client_hostname
+		-- ,sqlserver.client_pid
 		,sqlserver.database_name
 		,sqlserver.plan_handle
 		,sqlserver.query_hash
 		,sqlserver.query_plan_hash
+		-- ,sqlserver.session_id
 		,sqlserver.session_nt_username
 		,sqlserver.sql_text
 		,sqlserver.tsql_stack
@@ -33,7 +22,8 @@ ADD EVENT sqlserver.rpc_completed(
 	-- Predicate - time 1000 milisecond
 	)
 	WHERE (
-		duration >= 120000000 --by leaving off the event name, you can easily change to capture diff events
+		duration >= 1800000000 --by leaving off the event name, you can easily change to capture diff events
+		-- AND [sqlserver].[username]='AcquirerApiAppUser'
 	)
 	
 	--by leaving off the event name, you can easily change to capture diff events
@@ -48,10 +38,12 @@ ADD EVENT sqlserver.sql_statement_completed
 	ACTION(
 		sqlserver.client_app_name
 		,sqlserver.client_hostname
+		-- ,sqlserver.client_pid
 		,sqlserver.database_name
 		,sqlserver.plan_handle
 		,sqlserver.query_hash
 		,sqlserver.query_plan_hash
+		-- ,sqlserver.session_id
 		,sqlserver.session_nt_username
 		,sqlserver.sql_text
 		,sqlserver.tsql_stack
@@ -59,7 +51,8 @@ ADD EVENT sqlserver.sql_statement_completed
 	)
 	-- Predicate - time 1000 milisecond
 	WHERE (
-	duration >= 120000000
+	duration >= 1800000000
+	-- AND [sqlserver].[username]='AcquirerApiAppUser'
 	)
 )
 
@@ -80,25 +73,6 @@ ADD EVENT sqlserver.sql_statement_completed
 --	)
 
 
--- Add target for capturing the data - XML File
--- You don't need this (pull the ring buffer into temp table),
--- but allows us to capture more events (without allocating more memory to the buffer)
---!!! Remember the files will be left there when done!!!
-ADD TARGET package0.asynchronous_file_target(
-
-/*====================================================================
-============ AQUI COLOCAR A PASTA ONDE O ARQUIVO VAI FICAR =========
-====================================================================*/
-SET filename='D:\sql_log\LongRunningQuery.xet', metadatafile='D:\sql_log\LongRunningQuery.xem'),
-
--- Add target for capturing the data - Ring Buffer. Can query while live, or just see how chatty it is
-ADD TARGET package0.ring_buffer
-(SET max_memory = 4096)
-WITH (max_dispatch_latency = 1 SECONDS, TRACK_CAUSALITY = ON)
-GO
- 
- 
--- Enable Event, aka Turn It On
-ALTER EVENT SESSION LongRunningQuery ON SERVER
-STATE=START
+ADD TARGET package0.event_file(SET filename=N'E:\Events\LongRunningQuery.xel')
+WITH (MAX_MEMORY=4096 KB,EVENT_RETENTION_MODE=ALLOW_SINGLE_EVENT_LOSS,MAX_DISPATCH_LATENCY=30 SECONDS,MAX_EVENT_SIZE=0 KB,MEMORY_PARTITION_MODE=NONE,TRACK_CAUSALITY=OFF,STARTUP_STATE=OFF)
 GO

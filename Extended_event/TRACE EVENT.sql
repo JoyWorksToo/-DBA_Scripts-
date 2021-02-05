@@ -1,3 +1,4 @@
+sqlserver.client_pid
 
 /*================================================================================================================*/
 /*======================================= ACHAR O PATH DO ARQUIVO DO EVENT =======================================*/
@@ -18,6 +19,8 @@
 WITH events_cte AS (
 SELECT
 	DATEADD(mi, DATEDIFF(mi, GETUTCDATE(), CURRENT_TIMESTAMP), xevents.event_data.value('(event/@timestamp)[1]', 'datetime2')) AS [event time] ,
+	xevents.event_data.value('(event/action[@name="client_pid"]/value)[1]', 'bigint')  AS [client_pid],
+	xevents.event_data.value('(event/action[@name="session_id"]/value)[1]', 'bigint')  AS [session_id],
 	xevents.event_data.value('(event/action[@name="username"]/value)[1]', 'nvarchar(128)') AS [Username],
 	xevents.event_data.value('(event/action[@name="database_name"]/value)[1]', 'nvarchar(max)') AS [database name],
 	xevents.event_data.value('(event/action[@name="client_hostname"]/value)[1]', 'nvarchar(max)') AS [client host name],
@@ -29,16 +32,20 @@ SELECT
 	xevents.event_data.value('(event/data[@name="cpu_time"]/value)[1]', 'bigint') AS [cpu time (microSecs)],
 	xevents.event_data.value('(event/data[@name="physical_reads"]/value)[1]', 'bigint') AS [physical_reads],
 	xevents.event_data.value('(event/data[@name="logical_reads"]/value)[1]', 'bigint') AS [logical reads],
-	xevents.event_data.value('(event/data[@name="writes"]/value)[1]', 'bigint') AS [writes]
+	xevents.event_data.value('(event/data[@name="writes"]/value)[1]', 'bigint') AS [writes],
+	xevents.event_data.value('(event/data[@name="result"]/text)[1]', 'nvarchar(max)') AS [result]
 FROM sys.fn_xe_file_target_read_file
-('D:\sql_log\LongRunningQuery*.xet', --CASO O PATH ESTIVER ERRADO, RODAR A QUERY DE CIMA E COLOCAR O @path AQUI
+('E:\Events\AcquirerApiAppUser_problem_V2_0_132568359707340000.xel', --CASO O PATH ESTIVER ERRADO, RODAR A QUERY DE CIMA E COLOCAR O @path AQUI
  NULL,
 null, null)
 CROSS APPLY (select CAST(event_data as XML) as event_data) as xevents
 )
 
+
 SELECT
 	[event time]
+	, [client_pid]
+	, [session_id]
 	, [Username]
 	, [database name]
 	, [client host name]
@@ -46,17 +53,21 @@ SELECT
 	, [sql_text]
 	, [plan_handle]
 	, [query_hash]
-	, [duration (microSecs)] / 60000000.0 AS [duration (Minute)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos
-	, [cpu time (microSecs)] / 60000000.0 AS [cpu time (Minute)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos
-	-- , [duration (microSecs)] / 1000.0 AS [duration (MiliSecs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
-	-- , [cpu time (microSecs)] / 1000.0 AS [cpu time (MiliSecs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
+	--, [duration (microSecs)] / 60000000.0 AS [duration (Minute)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos
+	--, [cpu time (microSecs)] / 60000000.0 AS [cpu time (Minute)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos
+	--, [duration (microSecs)] / 1000.0 AS [duration (MiliSecs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
+	--, [cpu time (microSecs)] / 1000.0 AS [cpu time (MiliSecs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
+	, [duration (microSecs)] / 1000000.0 AS [duration (Secs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
+	, [cpu time (microSecs)] / 1000000.0 AS [cpu time (Secs)] --O tempo é em MicroSegundos, então precisa dividir por 60000000 para pegar o tempo em minutos -- para o autorizador
 	, [physical_reads]
 	, [logical reads]
 	, [writes]
-FROM events_cte
-ORDER BY [event time] DESC;
-
-
+	, [result]
+FROM #ext
+where
+	[session_id] is not null
+	AND [result] <> 'OK'
+ORDER BY [session_id], [client_pid], [event time] ;
 
 
 /*====================================================================================================================================*/
