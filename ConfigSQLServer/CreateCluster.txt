@@ -1,0 +1,1 @@
+New-Cluster -Name fin-wfc-sql1-p -Node fin-v-sql1-1p01.ad.stone.com.br,fin-v-sql1-2p01.ad.stone.com.br -StaticAddress 10.240.2.181,10.100.88.181 -NoStorage

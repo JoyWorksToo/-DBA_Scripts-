@@ -1,0 +1,26 @@
+
+Import-Module SQLPS
+$Machine = new-object 'Microsoft.SqlServer.Management.Smo.Wmi.ManagedComputer'
+$instance = $Machine.ServerInstances;
+$smo = 'Microsoft.SqlServer.Management.Smo.'
+$wmi = new-object ($smo + 'Wmi.ManagedComputer')
+$uri = $instance.Urn.Value + "/ServerProtocol[@Name='Tcp']"
+$Tcp = $wmi.GetSmoObject($uri)
+$Tcp 
+
+if($Tcp.IsEnabled -eq $false) {
+	$Tcp.IsEnabled = $true
+	$Tcp.Alter()
+}
+
+$wmi.GetSmoObject($uri + "/IPAddress[@Name='IPAll']").IPAddressProperties
+
+$wmi.GetSmoObject($uri + "/IPAddress[@Name='IPAll']").IPAddressProperties[0].Value=""
+$wmi.GetSmoObject($uri + "/IPAddress[@Name='IPAll']").IPAddressProperties[1].Value="31433"
+$wmi.GetSmoObject($uri + "/IPAddress[@Name='IPAll']").IPAddressProperties
+$Tcp.Alter()
+$wmi.GetSmoObject($uri + "/IPAddress[@Name='IPAll']").IPAddressProperties
+
+Get-Service -Name '*MSSQL*' | Stop-Service -Force
+Get-Service -Name '*MSSQL*' | Start-Service
+Get-Service -Name '*SQLAgent*' | Start-Service
