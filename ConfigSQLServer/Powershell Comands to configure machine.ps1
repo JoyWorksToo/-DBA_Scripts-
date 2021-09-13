@@ -44,6 +44,9 @@ try
 	    "NetBios is already Enabled"
     }
   
+	##set HighPerformance
+	powercfg.exe -SETACTIVE 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+
     ##Install Windows Feature
     import-module servermanager
     $FeatureInstalled = (Get-WindowsFeature -Name Telnet-Client,File-Services,Failover-Clustering,RSAT-Clustering-AutomationServer,RSAT-Clustering-PowerShell,RSAT-Clustering-CmdInterface,RSAT-AD-PowerShell,RSAT-Clustering-Mgmt | where Installed).name
