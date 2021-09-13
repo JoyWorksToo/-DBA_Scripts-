@@ -291,3 +291,15 @@ BEGIN
 END
 ELSE PRINT 'PLUBLIC does not have permission to EXECUTE on xp_dirtree.'
 
+/********************************/
+/*	Configure Fill Factor 90	*/
+/********************************/
+
+EXEC sys.sp_configure N'show advanced options', N'1'  RECONFIGURE WITH OVERRIDE
+GO
+EXEC sys.sp_configure N'fill factor (%)', N'90'
+GO
+RECONFIGURE WITH OVERRIDE
+GO
+EXEC sys.sp_configure N'show advanced options', N'0'  RECONFIGURE WITH OVERRIDE
+GO

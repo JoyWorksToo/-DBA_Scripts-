@@ -1,61 +1,105 @@
-
-### Config Alias
+##Common variables (just complete server(list separate by ","), ag and fqdn values)
+###############################################################################################
+[String[][]]$Server = @("bo-v-sql1-1p01","bo-v-sql1-1p02","bo-v-sql1-1p03","bo-v-sql1-2p01","bo-v-sql1-2p02","bo-v-sql1-2p03")
+[String]$Ag = "BUY4BO-AG"
+[String]$fqdn = "buy4sc.local"
+[String]$Instance = "SQL2016"
+[String]$TcpHostPort = "31433"
+[String]$TcpAgPort = "31435"
+###############################################################################################
+[String]$AgFQDN = "$Ag.$fqdn\$Instance"
 $registryPath = 'HKLM:\SOFTWARE\Microsoft\MSSQLServer\Client\ConnectTo'
 $registryPathWow6432Node = 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\MSSQLServer\Client\ConnectTo'
-IF ((Test-Path $registryPath) -eq $false) {
-	New-Item -Path $registryPath -Force | Out-Null
+###############################################################################################
+Function Test-RegistryValue {
+    param(
+        [Alias("PSPath")]
+        [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [String]$Path
+        ,
+		[Alias("Value")]
+        [Parameter(Position = 1, Mandatory = $true)]
+        [String]$Name
+        ,
+        [Switch]$PassThru
+    ) 
+
+    process {
+        if (Test-Path $Path) {
+            $Key = Get-Item -LiteralPath $Path
+            if ($Key.GetValue($Name, $null) -ne $null) {
+                if ($PassThru) {
+                    Get-ItemProperty $Path $Name
+                } else {
+                    $true
+                }
+            } else {
+                $false
+            }
+        } else {
+            $false
+        }
+    }
 }
 
-IF ((Test-Path $registryPathWow6432Node) -eq $false) {
-	New-Item -Path $registryPathWow6432Node -Force
+###############################################################################################
+
+if (-NOT (Test-path $registryPath)){
+    New-Item $registryPath 
+}
+
+if (-NOT (Test-path $registryPathWow6432Node)){
+    New-Item $registryPathWow6432Node 
 }
 
 Get-ItemProperty -Path $registryPath
 Get-ItemProperty -Path $registryPathWow6432Node
 
+## Create Server Alias
+foreach ($i in $Server){
+    [String]$Name = $i
+    [String]$ServerName =  "$i\$Instance" 
+    [String]$InstanceFQDNName = "$i.$fqdn\$Instance" 
+    
+    $ItemValue = "DBMSSOCN,$Name,$TcpHostPort"
+	
+    if (-NOT (Test-RegistryValue -Path $registryPath -Value $name)){
+        Set-ItemProperty -Path $registryPath -Name $Name -Value $ItemValue 
+    } 
+	if (-NOT (Test-RegistryValue -Path $registryPathWow6432Node -Value $name)){
+        Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $ItemValue
+    } 
 
-$TcpPort = "31433"
-$ServerName = 'Server'
-$Name = 'server'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 
+	if (-NOT (Test-RegistryValue -Path $registryPath -Value $ServerName)){
+        Set-ItemProperty -Path $registryPath -Name $ServerName -Value $ItemValue 
+    }
+	if (-NOT (Test-RegistryValue -Path $registryPathWow6432Node -Value $ServerName)){
+        Set-ItemProperty -Path $registryPathWow6432Node -Name $ServerName -Value $ItemValue
+    }
 
-$TcpPort = "31433"
-$ServerName = 'Server'
-$Name = 'server.fullName'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 
+	if (-NOT (Test-RegistryValue -Path $registryPath -Value $InstanceFQDNName)){
+        Set-ItemProperty -Path $registryPath -Name $InstanceFQDNName -Value $ItemValue 
+    }
+	if (-NOT (Test-RegistryValue -Path $registryPathWow6432Node -Value $InstanceFQDNName)){
+        Set-ItemProperty -Path $registryPathWow6432Node -Name $InstanceFQDNName -Value $ItemValue
+    }
 
+	if (-NOT (Test-RegistryValue -Path $registryPath -Value $AgFQDN)){
+        $AgItemValue = "DBMSSOCN,$Ag,$TcpAgPort"
+        Set-ItemProperty -Path $registryPath -Name $AgFQDN -Value $AgItemValue 
+    }
+	if (-NOT (Test-RegistryValue -Path $registryPathWow6432Node -Value $AgFQDN)){
+        $AgItemValue = "DBMSSOCN,$Ag,$TcpAgPort"
+        Set-ItemProperty -Path $registryPathWow6432Node -Name $AgFQDN -Value $AgItemValue
+    }
 
-$TcpPort = "31433"
-$ServerName = 'Server'
-$Name = 'server\Instance'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 
+	if (-NOT (Test-RegistryValue -Path $registryPath -Value $Ag)){
+        $AgItemValue = "DBMSSOCN,$Ag,$TcpAgPort"
+        Set-ItemProperty -Path $registryPath -Name $Ag -Value $AgItemValue 
+    }
+	if (-NOT (Test-RegistryValue -Path $registryPathWow6432Node -Value $Ag)){
+        $AgItemValue = "DBMSSOCN,$Ag,$TcpAgPort"
+        Set-ItemProperty -Path $registryPathWow6432Node -Name $Ag -Value $AgItemValue
+    }
+}
 
-
-$TcpPort = "31433"
-$ServerName = 'Server'
-$Name = 'server.fullName\Instance'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 
-
-
-$TcpPort = "31435"
-$ServerName = 'Server'
-$Name = 'AgName'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 
-
-
-$TcpPort = "31435"
-$ServerName = 'Server'
-$Name = 'AgName.fullName'
-$itemValue = "DBMSSOCN,$ServerName,$TcpPort"
-Set-ItemProperty -Path $registryPath -Name $Name -Value $itemValue 
-Set-ItemProperty -Path $registryPathWow6432Node -Name $Name -Value $itemValue 

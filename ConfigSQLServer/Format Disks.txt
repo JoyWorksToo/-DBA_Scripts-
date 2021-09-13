@@ -1,0 +1,6 @@
+select disk 6
+online disk
+Attributes disk clear readonly
+Convert GPT
+create partition primary align=1024
+Format fs=ntfs label="XXXX" unit=64k
