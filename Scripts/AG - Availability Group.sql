@@ -1,3 +1,13 @@
+--Contador de UNDO
+SELECT [object_name],
+[counter_name],
+[cntr_value], * FROM sys.dm_os_performance_counters
+WHERE [object_name] LIKE '%Database Replica%'
+AND [counter_name] = 'Log remaining for undo'
+go
+
+
+
 USE master
 GO
 SELECT 
