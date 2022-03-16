@@ -1,8 +1,305 @@
 /*
+Criação da tabela para guardar os dados do tamanho do arquivo e do espaço vazio dentro dele.
+*/
+
+USE [master]
+GO
+
+CREATE TABLE [dbo].[FileSizeDBs](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[DatabaseName] [varchar](128) NULL,
+	[FileName] [varchar](260) NULL,
+	[FileSizeInPage] [int] NULL,
+	[FileSpaceUsedInPage] [int] NULL,
+	[GetTime] [datetime] NULL CONSTRAINT [DF_FileSizeDBs_GetTime] DEFAULT GETDATE(),
+	
+	CONSTRAINT [PK_FileSizeDBs] PRIMARY KEY CLUSTERED ([Id] ASC) WITH (FILLFACTOR = 100) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[FileSizeDBs] ADD  DEFAULT (getdate()) FOR [GetTime]
+GO
+
+CREATE NONCLUSTERED INDEX [IX_DatabaseName_FileName_GetTime] ON [dbo].[FileSizeDBs]
+(
+	[DatabaseName] ASC,
+	[FileName] ASC,
+	[GetTime] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+
+/*
+Comando para coletar as infos de todos os bancos, menos os de sistema.
+*/
+
+DECLARE @command varchar(8000) 
+
+SELECT @command = 'IF ''?'' NOT IN(''master'', ''model'', ''msdb'', ''tempdb'') BEGIN USE ? 
+INSERT INTO master.dbo.FileSizeDBs (DatabaseName, FileName, FileSizeInPage, FileSpaceUsedInPage)
+   SELECT 
+	DB_NAME() AS DatabaseName
+	, [name]
+	, size AS FileSizeInPage
+	, fileproperty([name],''SpaceUsed'') AS FileSpaceUsedInPage
+FROM sys.database_files
+WHERE
+	type_desc <> ''LOG''
+END
+' 
+
+EXEC sp_MSforeachdb @command
+
+
+/*
+Baseado no que foi coletado, rodamos o comando para realizar o aumento manual dos arquivos.
+*/
+
+/*
+Primeiro temos um cursor para rodar todos os dbs que não são de sistema. para podermos rodar os comandos de autogrowth em cada um.
+
+Só fazemos as contas para arquivos com mais de 7 dias de dados guardados, isso é necessário para que não haja uma conta baseada em apenas 1~2 dias e termos dados suficientes para começar com a manutenção.
+
+Fazemos as contas do espaço que será necessário crescer. Nós excluimos os outliners.
+
+O que está dentro do @Command são as queries que pegam o tamanho do arquivo atual, o autogrowth dele (saber se é em % ou não) e se o autogrowth for maior que 1GB (1024MB) é setado 1024MB.
+Isso porque usamos o tamanho do autogrowth para crescer os arquivos.
+
+Precisamos usar osar o @Command para rodar em cada database porque precisamos usar a tabela sys.database_files para usar o comando fileproperty([name],'SpaceUsed'), isso é fundamental para sabermos se o arquivo precisa crescer ou não.
+
+*/
+
+DECLARE @DB_Name nvarchar(100) 
+DECLARE @Command NVARCHAR(MAX)
+
+set nocount on
+
+DECLARE database_cursor CURSOR FOR 
+
+	SELECT name
+	FROM MASTER.sys.sysdatabases 
+	WHERE dbid > 4
+	AND name not like 'SSISDB'
+
+OPEN database_cursor 
+
+FETCH NEXT FROM database_cursor INTO @DB_Name 
+
+WHILE @@FETCH_STATUS = 0 
+BEGIN 
+
+	IF (SELECT sys.fn_hadr_is_primary_replica ( @DB_Name ) ) = 1
+	BEGIN 
+		
+	DROP TABLE IF EXISTS #DiffSizeByDay
+		SELECT 
+			DatabaseName
+			, FileName
+			, SizeMB - LEAD(SizeMB, 1, null) OVER(PARTITION BY FileName ORDER BY GetTime DESC) AS DIFF_Size
+			, UsedSpaceMB - LEAD(UsedSpaceMB, 1, null) OVER(PARTITION BY FileName ORDER BY GetTime DESC) AS DIFF_FileUsedSpaceMB
+			, GetTime
+		INTO #DiffSizeByDay
+		FROM (
+			SELECT 
+				DatabaseName
+				, fs.FileName
+				, (CAST(MAX(FileSizeInPage) AS BIGINT) * 8) / (1024.) AS SizeMB
+				, (CAST(MAX(FileSpaceUsedInPage) AS BIGINT) * 8) / (1024.) AS UsedSpaceMB
+				, CAST(GetTime AS DATE) AS GetTime
+			FROM master.dbo.FileSizeDBs AS fs
+			INNER JOIN (
+				SELECT FileName, count(*) AS CT
+				FROM master.dbo.FileSizeDBs
+				WHERE GetTime >= DATEADD(DD, -15, GETDATE())
+				GROUP BY DatabaseName, FileName
+			) AS OnlyFilesWithMoreThan7Days
+			ON fs.FileName = OnlyFilesWithMoreThan7Days.FileName
+			WHERE
+				GetTime >= DATEADD(DD, -15, GETDATE())
+				AND DatabaseName =  @DB_Name
+				AND OnlyFilesWithMoreThan7Days.CT >= 7
+			GROUP BY 
+				DatabaseName, fs.FileName, CAST(GetTime AS DATE) 
+		) AS x
+
+		DROP TABLE IF EXISTS #ZScore 
+			SELECT 
+				DatabaseName
+				, FileName
+				, COUNT(*) as CNT
+				, AVG(DIFF_Size) AS AVG_DIFF_SIZE
+				, STDEV(DIFF_Size) AS STDEV_DIFF_SIZE
+				, AVG(DIFF_FileUsedSpaceMB) AS AVG_DIFF_FileUsedSpaceMB
+				, STDEV(DIFF_FileUsedSpaceMB) AS STDEV_DIFF_FileUsedSpaceMB
+			INTO #ZScore
+			FROM #DiffSizeByDay
+			WHERE
+				DIFF_Size IS NOT NULL
+			GROUP BY 
+				DatabaseName, FileName
+			HAVING SUM(DIFF_Size) > 0
+
+		DROP TABLE IF EXISTS #SizeNormalized
+			SELECT
+				F.DatabaseName
+				, F.FileName
+				, F.DIFF_Size
+				, F.DIFF_FileUsedSpaceMB
+				, CASE WHEN Z.STDEV_DIFF_SIZE = 0 THEN 0 ELSE (ABS((F.DIFF_Size - Z.AVG_DIFF_SIZE ) / Z.STDEV_DIFF_SIZE)) END AS DIFF_NORMALIZED
+				, CASE WHEN Z.STDEV_DIFF_FileUsedSpaceMB = 0 THEN 0 ELSE (ABS((F.DIFF_FileUsedSpaceMB - Z.AVG_DIFF_FileUsedSpaceMB ) / Z.STDEV_DIFF_FileUsedSpaceMB)) END AS DIFF_FileUsedSpaceMB_NORMALIZED
+				, GetTime 
+			INTO #SizeNormalized
+			FROM #DiffSizeByDay AS F
+			JOIN #ZScore AS Z
+				ON Z.FileName = F.FileName
+			ORDER BY
+				F.DatabaseName ASC, F.FileName ASC, GetTime DESC
+
+		DROP TABLE IF EXISTS #diff_size
+			SELECT 
+				DatabaseName, FileName, AVG(DIFF_Size) AS AVG_DIFF_Size_MB
+			INTO #diff_size
+			FROM #SizeNormalized
+			WHERE
+				DIFF_NORMALIZED < 2
+				AND DIFF_Size IS NOT NULL
+			GROUP BY 
+				DatabaseName, FileName
+			HAVING 
+				AVG(DIFF_Size) > 0
+			ORDER BY 
+				DatabaseName ASC, FileName ASC
+
+		DROP TABLE IF EXISTS ##diff_UsedSize
+			SELECT 
+				DatabaseName, FileName, AVG(DIFF_FileUsedSpaceMB) AS AVG_DIFF_FileUsedSpaceMB
+			INTO ##diff_UsedSize
+			FROM #SizeNormalized
+			WHERE
+				DIFF_FileUsedSpaceMB_NORMALIZED < 2
+				AND DIFF_FileUsedSpaceMB IS NOT NULL
+			GROUP BY 
+				DatabaseName, FileName
+			HAVING 
+				AVG(DIFF_FileUsedSpaceMB) > 0
+			ORDER BY 
+				DatabaseName, FileName ASC
+
+		SELECT @Command =  'USE '+ @DB_NAME +  '; 
+		DROP TABLE IF EXISTS #FilesToGrowth
+		SELECT ''ALTER DATABASE ['' + DatabaseName + ''] MODIFY FILE ( NAME = N'''''' + FName + '''''', SIZE = '' + CAST((SizeToGrowthMB + SizeMB) AS VARCHAR(128)) + ''MB );'' AS CMD
+		INTO #FilesToGrowth
+		FROM (
+			SELECT
+				Actual.DatabaseName
+				, Actual.FileName as FName
+				, Actual.GetTime
+				, Actual.SizeMB
+				, Actual.UsedSpaceMB
+				, Actual.SizeMB - Actual.UsedSpaceMB AS FreeSpaceMB
+				, Used.AVG_DIFF_FileUsedSpaceMB
+				, Actual.GrowthMB
+				, CASE WHEN 2*(Actual.SizeMB - Actual.UsedSpaceMB) < Used.AVG_DIFF_FileUsedSpaceMB THEN 1 ELSE 0 END AS ToGrowth
+				, CASE 
+					WHEN Actual.is_percent_growth <> 1 THEN IIF((CEILING(Used.AVG_DIFF_FileUsedSpaceMB / Actual.GrowthMB) * Actual.GrowthMB < (1024*10)), CEILING(Used.AVG_DIFF_FileUsedSpaceMB / Actual.GrowthMB) * Actual.GrowthMB, (1024*10))
+					ELSE CEILING(Used.AVG_DIFF_FileUsedSpaceMB / 64) * 64
+				END  SizeToGrowthMB
+			FROM (
+					SELECT DB_NAME() AS DatabaseName
+						, [name] AS FileName
+						,  (CAST(size  AS BIGINT) * 8) / (1024.) AS SizeMB
+						,  (CAST(fileproperty([name],''SpaceUsed'')  AS BIGINT) * 8) / (1024.) AS UsedSpaceMB
+						, IIF(((growth/128.) <= 1024), (growth/128.), 1024)  AS GrowthMB
+						, is_percent_growth
+						, GETDATE() AS GetTime
+					FROM sys.database_files
+					WHERE
+						type_desc <> ''LOG''
+				) AS Actual
+			INNER JOIN ##diff_UsedSize AS Used
+				ON Actual.FileName = Used.FileName
+			WHERE
+				2*(Actual.SizeMB - Actual.UsedSpaceMB) < Used.AVG_DIFF_FileUsedSpaceMB
+		) AS x
+
+		DECLARE @execCommand varchar(8000)
+
+		DECLARE GrowthFilesCursor CURSOR FOR
+		
+			SELECT CMD
+			FROM #FilesToGrowth
+
+		OPEN GrowthFilesCursor
+		FETCH NEXT FROM GrowthFilesCursor INTO  @execCommand
+		WHILE @@FETCH_STATUS = 0 BEGIN
+		
+			EXECUTE (@execCommand )
+			--PRINT @execCommand 
+		FETCH NEXT FROM GrowthFilesCursor INTO  @execCommand
+		END
+
+		CLOSE GrowthFilesCursor
+		DEALLOCATE GrowthFilesCursor
+
+		'
+		EXEC sp_executesql @Command 
+
+	--Fim do if db is primary	
+	END
+
+     FETCH NEXT FROM database_cursor INTO @DB_Name 
+END 
+
+CLOSE database_cursor 
+DEALLOCATE database_cursor 
+
+
+/***************************************************************************************************************************************************/
+/***************************************************************************************************************************************************/
+/***************************************************************************************************************************************************/
+/***************************************************************************************************************************************************/
+/***************************************************************************************************************************************************/
+/*
+ OLD STUFF
+*/
+
+USE master
+
+CREATE TABLE master.dbo.FileSizeDBs (
+	Id INT IDENTITY(1,1),
+	DatabaseName VARCHAR(128),
+	FileName VARCHAR(260),
+	FileSizeInPage INT,
+	FileSpaceUsedInPage INT,
+	GetTime DATETIME DEFAULT GETDATE(),
+	
+	CONSTRAINT [PK_FileSizeDBs] PRIMARY KEY CLUSTERED ([Id])
+)
+GO
+CREATE NONCLUSTERED INDEX [IX_DatabaseName_FileName_GetTime] ON master.dbo.FileSizeDBs(
+	DatabaseName, 
+	FileName, 
+	GetTime
+)
+GO
+
+INSERT INTO master.dbo.FileSizeDBs (DatabaseName, FileName, FileSizeInPage, FileSpaceUsedInPage)
+SELECT 
+	DB_NAME() AS DatabaseName
+	, [name]
+	, size AS FileSizeInPage
+	, fileproperty([name],'SpaceUsed') AS FileSpaceUsedInPage
+FROM sys.database_files
+WHERE
+	type_desc <> 'LOG'
+GO
+
+
+/*
 --Antigo
 --CREATE TABLE master.dbo.FileSize (FileName VARCHAR(128), SizeMB DECIMAL(12,2), file_size_mb decimal(12,2), FreeSpaceInPages int, free_space_MB decimal(12,2), GetTime datetime)
 --use buy4_bo
 --go
+
 
 ----INSERT INTO master.dbo.FileSize 
 select 
