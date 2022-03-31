@@ -2,9 +2,8 @@
 use <Table>
 GO
 
---OR NULL
-Declare @LoginName VARCHAR(128) = 'XXXX'
---Declare @LoginName VARCHAR(128)
+--Declare @LoginName VARCHAR(128) = 'XXXX'
+Declare @LoginName VARCHAR(128)
 /*
 Security Audit Report
 1) List all access provisioned to a SQL user or Windows user/group directly
@@ -37,7 +36,8 @@ ObjectName      : Name of the object that the user/role is assigned permissions 
 ColumnName      : Name of the column of the object that the user/role is assigned permissions on. This value
                   is only populated if the object is a table, view or a table value function.
 */
-
+SELECT *
+FROM (
     SELECT
         [UserType] = CASE princ.[type]
                          WHEN 'S' THEN 'SQL User'
@@ -130,8 +130,13 @@ UNION
         -- No need for these system accounts
         AND membprinc.[name] NOT IN ('sys', 'INFORMATION_SCHEMA')
 		AND (@LoginName IS NULL OR ulogin.[name] = @LoginName)
-
+) AS x
+	WHERE 1=1
+		--AND LoginName like ''
+		--AND [Schema] like ''
+		--AND ObjectName like ''
 ORDER BY
+	
     [UserType],
     [DatabaseUserName],
     [LoginName],

@@ -1,11 +1,14 @@
+
 ##Common variables (just complete server(list separate by ","), ag and fqdn values)
 ###############################################################################################
-[String[][]]$Server = @("bo-v-sql1-1p01","bo-v-sql1-1p02","bo-v-sql1-1p03","bo-v-sql1-2p01","bo-v-sql1-2p02","bo-v-sql1-2p03")
-[String]$Ag = "BUY4BO-AG"
-[String]$fqdn = "buy4sc.local"
-[String]$Instance = "SQL2016"
+##Alter only these values:
+[String[][]]$Server = @("Prefix-v-sql1-1p01","Prefix-v-sql1-2p01")
+[String]$Ag = "Prefix-ag-sql1-p"
+[String]$fqdn = "ad.stone.com.br"
+[String]$Instance = "SQL2019"
 [String]$TcpHostPort = "31433"
 [String]$TcpAgPort = "31435"
+
 ###############################################################################################
 [String]$AgFQDN = "$Ag.$fqdn\$Instance"
 $registryPath = 'HKLM:\SOFTWARE\Microsoft\MSSQLServer\Client\ConnectTo'
@@ -103,3 +106,6 @@ foreach ($i in $Server){
     }
 }
 
+#Check all Aliases
+Get-Item $registryPath
+Get-Item $registryPathWow6432Node

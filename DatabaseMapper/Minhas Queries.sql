@@ -27,6 +27,37 @@ GROUP BY
 	, Servername + CASE WHEN ins.InstanceName <> 'NULL' THEN '\' + ins.InstanceName ELSE '' END 
 	, ag.AGName
 
+--Separa ATL e CHI
+SELECT *
+FROM (
+	SELECT 
+		ag.AGName
+		, ser.Servername
+		, RIGHT(ser.Servername, CHARINDEX('-',REVERSE(ser.Servername))-1) AS VMPosition
+		, CASE 
+			WHEN RIGHT(ser.Servername, CHARINDEX('-',REVERSE(ser.Servername))-1) LIKE '1P%' THEN 'ATLANTA'
+			WHEN RIGHT(ser.Servername, CHARINDEX('-',REVERSE(ser.Servername))-1) LIKE '2P%' THEN 'CHICAGO'
+			ELSE 'undefined'
+		END AS DataCenter
+	FROM MyServer AS ser
+	INNER JOIN SQLInstance AS ins
+		ON ser.MyServerId = ins.MyServerId
+	INNER JOIN ServerInstanceAG AS serAg
+		ON serAg.SQLInstanceId = ins.SQLInstanceID
+	INNER JOIN HighAvailabilityGroup AS ag
+		ON ag.AGId = serAg.AGId
+	WHERE
+		ins.IsMonitored = 1
+		AND serAg.IsPrimary = 1
+) AS PrimaryAg
+WHERE
+	1=1 
+	--AND DataCenter = 'ATLANTA'
+	--AND DataCenter = 'CHICAGO'
+ORDER BY
+	DataCenter ASC
+	, AGName ASC
+
 
 --Esse é agrupado por AG
 --Last Backup FULL in DAYS
