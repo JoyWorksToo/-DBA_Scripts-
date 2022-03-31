@@ -17,8 +17,6 @@ CREATE TABLE [dbo].[FileSizeDBs](
 ) ON [PRIMARY]
 GO
 
-ALTER TABLE [dbo].[FileSizeDBs] ADD  DEFAULT (getdate()) FOR [GetTime]
-GO
 
 CREATE NONCLUSTERED INDEX [IX_DatabaseName_FileName_GetTime] ON [dbo].[FileSizeDBs]
 (

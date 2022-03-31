@@ -1,6 +1,27 @@
-select disk 6
+
+md "M:\DataDisks\DataDisk01"
+md "M:\LogDisks\LogDisk01"
+md "M:\TempDBDisks\TempDBDisk01"
+
+select disk X
 online disk
 Attributes disk clear readonly
 Convert GPT
 create partition primary align=1024
-Format fs=ntfs label="XXXX" unit=64k
+Format fs=ntfs label="TypeDisk" unit=64k
+##
+assign mount=M:\DataDisks\DataDisk01
+assign mount=M:\LogDisks\LogDisk01
+assign mount=M:\TempDBDisks\TempDBDisk01
+##
+
+TypeDisk: DataDisk01, LogDisk01, TempDBDisk01
+
+
+
+select disk X
+online disk
+Attributes disk clear readonly
+Convert GPT
+create partition primary align=1024
+Format fs=ntfs label="DataDisk12" unit=64k

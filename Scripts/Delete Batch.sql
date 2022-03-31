@@ -29,4 +29,9 @@ BEGIN
         ON A.Id = B.Id
 	
     DROP TABLE #EscopoDelete
+	
+	set @msg = 'deleted day ' + CONVERT(VARCHAR(100), @minDate, 21) + 'AT ' + CONVERT(VARCHAR(100), GETDATE(), 21) 
+	
+	RAISERROR (@msg, 10, 1) WITH NOWAIT
+	
 END
